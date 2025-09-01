@@ -39,7 +39,7 @@ jobs:
       - name: Build web binary
         run: |
           set -euxo pipefail
-          roc build web.roc
+          roc build web.roc --linker legacy
           file ./web || true
 
       - name: Log in to GHCR
