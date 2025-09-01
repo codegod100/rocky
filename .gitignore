@@ -1,0 +1,5 @@
+examples/
+main
+web
+fizz
+*.db*

@@ -1,0 +1,70 @@
+name: Build and Publish to GHCR
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/web-roc
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (curl, tar)
+        run: sudo apt-get update && sudo apt-get install -y curl tar
+
+      - name: Install Roc (nightly linux_x86_64)
+        run: |
+          set -euxo pipefail
+          ROC_URL="https://github.com/roc-lang/roc/releases/download/nightly/roc_nightly-linux_x86_64-latest.tar.gz"
+          curl -fsSL "$ROC_URL" -o /tmp/roc.tgz
+          mkdir -p /opt/roc
+          tar -xzf /tmp/roc.tgz -C /opt/roc
+          ROC_BIN=$(find /opt/roc -type f -name roc -perm -111 | head -n1)
+          test -n "$ROC_BIN"
+          mkdir -p "$HOME/.local/bin"
+          cp "$ROC_BIN" "$HOME/.local/bin/roc"
+          chmod +x "$HOME/.local/bin/roc"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          roc --version
+
+      - name: Build web binary
+        run: |
+          set -euxo pipefail
+          roc build web.roc
+          file ./web || true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
